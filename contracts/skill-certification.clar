@@ -1,11 +1,12 @@
 ;; Skill Certification Contract
 
-;; Constants
+;; Constants 
 (define-constant contract-owner tx-sender)
 (define-constant err-owner-only (err u100))
 (define-constant err-not-found (err u101))
 (define-constant err-already-exists (err u102))
 (define-constant err-unauthorized (err u103))
+(define-constant err-invalid-endorsement (err u104))
 
 ;; Data Variables
 (define-map certifiers principal bool)
@@ -17,11 +18,19 @@
     uint 
     { name: (string-ascii 64), description: (string-ascii 256) }
 )
+(define-map endorsements
+    { cert-holder: principal, skill-id: uint, endorser: principal }
+    { timestamp: uint, rating: uint, comment: (string-ascii 256) }
+)
 (define-data-var skill-counter uint u0)
 
 ;; Private Functions
 (define-private (is-certifier (issuer principal))
     (default-to false (map-get? certifiers issuer))
+)
+
+(define-private (validate-rating (rating uint))
+    (<= rating u5)
 )
 
 ;; Public Functions
@@ -73,6 +82,20 @@
     )
 )
 
+(define-public (endorse-skill (cert-holder principal) (skill-id uint) (rating uint) (comment (string-ascii 256)))
+    (let ((cert (map-get? certificates { holder: cert-holder, skill-id: skill-id })))
+        (asserts! (is-some cert) err-not-found)
+        (asserts! (get valid (unwrap-panic cert)) err-unauthorized)
+        (asserts! (validate-rating rating) err-invalid-endorsement)
+        (asserts! (not (is-eq tx-sender cert-holder)) err-unauthorized)
+        (map-set endorsements
+            { cert-holder: cert-holder, skill-id: skill-id, endorser: tx-sender }
+            { timestamp: block-height, rating: rating, comment: comment }
+        )
+        (ok true)
+    )
+)
+
 ;; Read-only Functions
 (define-read-only (get-certificate (holder principal) (skill-id uint))
     (ok (map-get? certificates { holder: holder, skill-id: skill-id }))
@@ -89,4 +112,8 @@
             err-not-found
         )
     )
+)
+
+(define-read-only (get-endorsement (cert-holder principal) (skill-id uint) (endorser principal))
+    (ok (map-get? endorsements { cert-holder: cert-holder, skill-id: skill-id, endorser: endorser }))
 )

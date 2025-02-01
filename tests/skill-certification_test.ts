@@ -69,3 +69,52 @@ Clarinet.test({
         validateBlock.receipts[0].result.expectOk().expectBool(true);
     }
 });
+
+Clarinet.test({
+    name: "Test skill endorsement functionality",
+    async fn(chain: Chain, accounts: Map<string, Account>) {
+        const deployer = accounts.get('deployer')!;
+        const certifier = accounts.get('wallet_1')!;
+        const recipient = accounts.get('wallet_2')!;
+        const endorser = accounts.get('wallet_3')!;
+
+        let block = chain.mineBlock([
+            Tx.contractCall('skill-certification', 'register-certifier',
+                [types.principal(certifier.address)],
+                deployer.address
+            ),
+            Tx.contractCall('skill-certification', 'add-skill',
+                [types.ascii("Blockchain Development"),
+                 types.ascii("Proficiency in developing smart contracts")],
+                deployer.address
+            ),
+            Tx.contractCall('skill-certification', 'issue-certificate',
+                [types.principal(recipient.address),
+                 types.uint(1)],
+                certifier.address
+            ),
+            Tx.contractCall('skill-certification', 'endorse-skill',
+                [types.principal(recipient.address),
+                 types.uint(1),
+                 types.uint(5),
+                 types.ascii("Excellent blockchain developer")],
+                endorser.address
+            )
+        ]);
+
+        block.receipts.forEach(receipt => {
+            receipt.result.expectOk();
+        });
+
+        let endorsementBlock = chain.mineBlock([
+            Tx.contractCall('skill-certification', 'get-endorsement',
+                [types.principal(recipient.address),
+                 types.uint(1),
+                 types.principal(endorser.address)],
+                deployer.address
+            )
+        ]);
+
+        endorsementBlock.receipts[0].result.expectOk();
+    }
+});
